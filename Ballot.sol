@@ -26,6 +26,7 @@ pragma solidity ^0.8.3;
 
 contract Ballot {
 
+    address public tokenSmartContractAddress;
     address public ballotOfficialAddress;      
     
     // get block number with hash of previous block
@@ -85,13 +86,14 @@ contract Ballot {
     
    
     // declare voting starts now
-    function startVote()
+    function startVote(address TokenAddress)
         public
         inState(State.Created) 
         onlyOfficial //only owner can start vote
     {
         state = State.Voting;     
         blockNumberPrevious = block.number-1;
+        tokenSmartContractAddress = TokenAddress;
         emit voteStarted(blockNumberPrevious);
     }
 
@@ -104,7 +106,8 @@ contract Ballot {
 
         votes[msg.sender] = uint8(_choice);
         votersAdresses.push(msg.sender);
-        votersBalances[msg.sender] = msg.sender.balance;
+        uint tokenBalance = ERC20Interface(tokenSmartContractAddress).balanceOf(msg.sender);
+        votersBalances[msg.sender] = tokenBalance;
         
         emit voteDone(msg.sender, _choice);
     }
@@ -134,10 +137,11 @@ contract Ballot {
     // this don't prevent to vote twice from different wallets
     // to prevent this we have to run script to get balances
     // of the addresses at specific blocknumber. 
-    // Which is now now possible within solidity
-    function getTotalBalancePerProposal() public view returns (uint[3] memory){
+    // Which is now not possible within solidity
+    function getTotalBalancePerProposal() public view returns (uint[4] memory){
     
-        uint[3] memory totalVotesArray;
+        // 0 is included 
+        uint[4] memory totalVotesArray;
     
         for (uint i=0; i<votersAdresses.length; i++) {
             uint8 choice = votes[votersAdresses[i]];
@@ -150,4 +154,8 @@ contract Ballot {
 
         return totalVotesArray;
     }
+}
+
+abstract contract  ERC20Interface {
+    function balanceOf(address whom) view virtual public returns (uint);
 }
