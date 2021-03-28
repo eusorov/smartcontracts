@@ -2,7 +2,8 @@
 /**
  * @file Ballot.sol
  * 
- * Only owner can start the vote: startVote()
+ * Only owner can start the vote: startVote() for specific 
+ * token smart contract adress.
  * The blocknumber of previous block will be stored.
  * 
  * Every user can vote: doVote()
@@ -32,8 +33,8 @@ contract Ballot {
     // get block number with hash of previous block
     uint public blockNumberPrevious;
 
-    // all proposals as 0 = NOVOTE, 1 = CAPITALX_FUND, 2 = NFTSTREAMZ, 3 = DEFI_NFT
-    enum Proposals { NOVOTE, CAPITALX_FUND, NFTSTREAMZ, DEFI_NFT }
+    // all proposals as 0 = NOVOTE, 1 = proposal 1 , 2, proposal 2
+    string[] public proposalsArray;
     
     // save all votes
     mapping(address => uint8) public votes;
@@ -41,7 +42,7 @@ contract Ballot {
     // save all voters adress to get balance later
     address[] public votersAdresses;
     
-    // save balance 
+    // save balances 
     mapping(address => uint) public votersBalances;
   
     enum State { Created, Voting, Ended }
@@ -51,6 +52,7 @@ contract Ballot {
 	constructor() {
         ballotOfficialAddress = msg.sender;
         state = State.Created;
+        proposalsArray.push('NOVOTE'); // init 0 =no vote
     }
     
     // only owner can do something
@@ -73,18 +75,27 @@ contract Ballot {
 		_;
 	}
 	
-	// allow only values 1 .. 3
-    modifier allowedValues(Proposals choice) {
-		require(uint8(choice)> 0 && uint8(choice)<=3);
+	// allow only values 1 .. number of proposals
+    modifier allowedValues(uint8 choice) {
+		require(choice > 0 && choice < proposalsArray.length);
 		_;
 	}
 	
 	// emit events for start at blockNumberPrevious
     event voteStarted(uint blockNumberPrevious);
     event voteEnded();
-    event voteDone(address voter, Proposals choice);
+    event voteDone(address voter, uint8 choice);
     
    
+    function addProposal(string memory proposalName)
+        public
+        inState(State.Created) 
+        onlyOfficial //only owner can add proposals
+    {
+        
+        proposalsArray.push(proposalName);
+    }
+    
     // declare voting starts now
     function startVote(address TokenAddress)
         public
@@ -98,18 +109,19 @@ contract Ballot {
     }
 
     // voters vote by indicating their choice
-    function doVote(Proposals _choice)
+    function doVote(uint8 choice)
         public
         inState(State.Voting)
+        allowedValues(choice)
         notAlreadyVoted() //vote can by only once
     {
 
-        votes[msg.sender] = uint8(_choice);
+        votes[msg.sender] = choice;
         votersAdresses.push(msg.sender);
         uint tokenBalance = ERC20Interface(tokenSmartContractAddress).balanceOf(msg.sender);
         votersBalances[msg.sender] = tokenBalance;
         
-        emit voteDone(msg.sender, _choice);
+        emit voteDone(msg.sender, choice);
     }
     
     //end votes
@@ -138,10 +150,13 @@ contract Ballot {
     // to prevent this we have to run script to get balances
     // of the addresses at specific blocknumber. 
     // Which is now not possible within solidity
-    function getTotalBalancePerProposal() public view returns (uint[4] memory){
+    function getTotalBalancePerProposal() public 
+    inState(State.Ended) // results only after vote ended
+    view 
+    returns (uint[] memory){
     
         // 0 is included 
-        uint[4] memory totalVotesArray;
+        uint[] memory totalVotesArray = new uint[](proposalsArray.length);
     
         for (uint i=0; i<votersAdresses.length; i++) {
             uint8 choice = votes[votersAdresses[i]];
@@ -156,6 +171,8 @@ contract Ballot {
     }
 }
 
+
+// interface for getting balance of the token holders
 abstract contract  ERC20Interface {
     function balanceOf(address whom) view virtual public returns (uint);
 }
